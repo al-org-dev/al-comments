@@ -9,12 +9,13 @@ module AlComments
 
       page = context.registers[:page] || context['page'] || {}
       output = []
+      disqus_shortname = resolve_disqus_shortname(site)
 
-      if site.config['disqus_shortname'] && truthy?(page['disqus_comments'])
-        output << disqus_html(site, page)
+      if disqus_shortname && truthy?(fetch_key(page, 'disqus_comments'))
+        output << disqus_html(site, page, disqus_shortname)
       end
 
-      if truthy?(page['giscus_comments'])
+      if truthy?(fetch_key(page, 'giscus_comments'))
         output << giscus_html(site, page)
       end
 
@@ -24,20 +25,86 @@ module AlComments
     private
 
     def truthy?(value)
-      value == true || value.to_s == 'true'
+      return false if value.nil? || value == false
+      return true if value == true
+      return true if value.is_a?(Numeric) && value != 0
+
+      normalized = value.to_s.strip.downcase
+      %w[true 1 yes y on].include?(normalized)
     end
 
     def post_layout?(page)
-      page['layout'].to_s == 'post'
+      fetch_key(page, 'layout').to_s == 'post'
     end
 
-    def disqus_html(site, page)
+    def fetch_key(hash, *keys)
+      return nil unless hash.respond_to?(:key?)
+
+      keys.each do |key|
+        return hash[key] if hash.key?(key)
+
+        string_key = key.to_s
+        return hash[string_key] if hash.key?(string_key)
+
+        symbol_key = key.respond_to?(:to_sym) ? key.to_sym : nil
+        return hash[symbol_key] if symbol_key && hash.key?(symbol_key)
+      end
+
+      nil
+    end
+
+    def value_blank?(value)
+      value.nil? || value.to_s.strip.empty?
+    end
+
+    def resolve_disqus_shortname(site)
+      direct = fetch_key(site.config, 'disqus_shortname')
+      return direct.to_s unless value_blank?(direct)
+
+      disqus = fetch_key(site.config, 'disqus')
+      return nil unless disqus.is_a?(Hash)
+
+      nested = fetch_key(disqus, 'shortname')
+      return nil if value_blank?(nested)
+
+      nested.to_s
+    end
+
+    def resolve_giscus_config(site)
+      giscus = fetch_key(site.config, 'giscus')
+      return giscus if giscus.is_a?(Hash)
+
+      comments = fetch_key(site.config, 'comments')
+      return {} unless comments.is_a?(Hash)
+
+      nested = fetch_key(comments, 'giscus')
+      nested.is_a?(Hash) ? nested : {}
+    end
+
+    def resolve_giscus_repo(site, giscus)
+      repo = fetch_key(giscus, 'repo', 'repository', 'repo_name')
+      return repo.to_s unless value_blank?(repo)
+
+      repository = fetch_key(site.config, 'repository')
+      return repository.to_s unless value_blank?(repository)
+
+      github = fetch_key(site.config, 'github')
+      if github.is_a?(Hash)
+        repository_nwo = fetch_key(github, 'repository_nwo')
+        return repository_nwo.to_s unless value_blank?(repository_nwo)
+      end
+
+      ''
+    end
+
+    def disqus_html(site, page, disqus_shortname)
+      max_width = fetch_key(site.config, 'max_width')
       <<~HTML
-        <div id="disqus_thread" style="max-width: #{site.config['max_width']}; margin: 0 auto;">
+        <div id="disqus_thread" style="max-width: #{max_width}; margin: 0 auto;">
           <script type="text/javascript">
-            var disqus_shortname  = #{site.config['disqus_shortname'].to_json};
-            var disqus_identifier = #{page['id'].to_s.to_json};
-            var disqus_title      = #{page['title'].to_s.to_json};
+            var disqus_shortname  = #{disqus_shortname.to_json};
+            var disqus_identifier = #{fetch_key(page, 'id').to_s.to_json};
+            var disqus_title      = #{fetch_key(page, 'title').to_s.to_json};
             (function() {
               var dsq = document.createElement('script');
               dsq.type = 'text/javascript';
@@ -55,17 +122,20 @@ module AlComments
     end
 
     def giscus_html(site, page)
-      giscus = site.config['giscus'] || {}
-      style = post_layout?(page) ? " style=\"max-width: #{site.config['max_width']}; margin: 0 auto;\"" : ''
+      giscus = resolve_giscus_config(site)
+      repo = resolve_giscus_repo(site, giscus)
+      max_width = fetch_key(site.config, 'max_width')
+      style = post_layout?(page) ? " style=\"max-width: #{max_width}; margin: 0 auto;\"" : ''
       spacer = post_layout?(page) ? "\n  <br>" : ''
 
-      if giscus['repo'].to_s.strip.empty?
-        warning = <<~MARKDOWN
-          > ##### giscus comments misconfigured
-          > Please follow instructions at [http://giscus.app](http://giscus.app) and update your giscus configuration.
-          {: .block-danger }
-        MARKDOWN
-        return %(<div id="giscus_thread"#{style}>#{spacer}\n#{Jekyll::Converters::Markdown.new(site.config).convert(warning)}</div>)
+      if repo.to_s.strip.empty?
+        warning = <<~HTML
+          <blockquote class="block-danger">
+            <h5>giscus comments misconfigured</h5>
+            <p>Please follow instructions at <a href="http://giscus.app">http://giscus.app</a> and update your giscus configuration.</p>
+          </blockquote>
+        HTML
+        return %(<div id="giscus_thread"#{style}>#{spacer}\n#{warning}</div>)
       end
 
       <<~HTML
@@ -79,17 +149,17 @@ module AlComments
               var giscusTheme = determineGiscusTheme();
               var attrs = {
                 src: "https://giscus.app/client.js",
-                "data-repo": #{giscus['repo'].to_s.to_json},
-                "data-repo-id": #{giscus['repo_id'].to_s.to_json},
-                "data-category": #{giscus['category'].to_s.to_json},
-                "data-category-id": #{giscus['category_id'].to_s.to_json},
-                "data-mapping": #{giscus['mapping'].to_s.to_json},
-                "data-strict": #{giscus['strict'].to_s.to_json},
-                "data-reactions-enabled": #{giscus['reactions_enabled'].to_s.to_json},
-                "data-emit-metadata": #{giscus['emit_metadata'].to_s.to_json},
-                "data-input-position": #{giscus['input_position'].to_s.to_json},
+                "data-repo": #{repo.to_s.to_json},
+                "data-repo-id": #{fetch_key(giscus, 'repo_id').to_s.to_json},
+                "data-category": #{fetch_key(giscus, 'category').to_s.to_json},
+                "data-category-id": #{fetch_key(giscus, 'category_id').to_s.to_json},
+                "data-mapping": #{fetch_key(giscus, 'mapping').to_s.to_json},
+                "data-strict": #{fetch_key(giscus, 'strict').to_s.to_json},
+                "data-reactions-enabled": #{fetch_key(giscus, 'reactions_enabled').to_s.to_json},
+                "data-emit-metadata": #{fetch_key(giscus, 'emit_metadata').to_s.to_json},
+                "data-input-position": #{fetch_key(giscus, 'input_position').to_s.to_json},
                 "data-theme": giscusTheme,
-                "data-lang": #{giscus['lang'].to_s.to_json},
+                "data-lang": #{fetch_key(giscus, 'lang').to_s.to_json},
                 crossorigin: "anonymous",
                 async: true
               };
@@ -109,16 +179,22 @@ module AlComments
     end
 
     def theme_detection(site)
-      if site.config['enable_darkmode']
+      giscus = resolve_giscus_config(site)
+      dark_theme = fetch_key(giscus, 'dark_theme').to_s
+      light_theme = fetch_key(giscus, 'light_theme').to_s
+      dark_theme = 'dark' if value_blank?(dark_theme)
+      light_theme = 'light' if value_blank?(light_theme)
+
+      if fetch_key(site.config, 'enable_darkmode')
         <<~JS
           var theme = localStorage.getItem("theme") || document.documentElement.getAttribute("data-theme") || "system";
-          if (theme === "dark") return #{site.config.dig('giscus', 'dark_theme').to_s.to_json};
-          if (theme === "light") return #{site.config.dig('giscus', 'light_theme').to_s.to_json};
+          if (theme === "dark") return #{dark_theme.to_json};
+          if (theme === "light") return #{light_theme.to_json};
           var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          return prefersDark ? #{site.config.dig('giscus', 'dark_theme').to_s.to_json} : #{site.config.dig('giscus', 'light_theme').to_s.to_json};
+          return prefersDark ? #{dark_theme.to_json} : #{light_theme.to_json};
         JS
       else
-        %(return #{site.config.dig('giscus', 'light_theme').to_s.to_json};)
+        %(return #{light_theme.to_json};)
       end
     end
   end
