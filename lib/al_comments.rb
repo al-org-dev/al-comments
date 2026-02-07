@@ -81,20 +81,42 @@ module AlComments
       nested.is_a?(Hash) ? nested : {}
     end
 
-    def resolve_giscus_repo(site, giscus)
+    def resolve_giscus_repo(_site, giscus)
       repo = fetch_key(giscus, 'repo', 'repository', 'repo_name')
-      return repo.to_s unless value_blank?(repo)
+      return '' if value_blank?(repo)
 
-      repository = fetch_key(site.config, 'repository')
-      return repository.to_s unless value_blank?(repository)
+      repo.to_s
+    end
 
-      github = fetch_key(site.config, 'github')
-      if github.is_a?(Hash)
-        repository_nwo = fetch_key(github, 'repository_nwo')
-        return repository_nwo.to_s unless value_blank?(repository_nwo)
+    def missing_giscus_fields(giscus, repo)
+      required = {
+        'repo' => repo,
+        'repo_id' => fetch_key(giscus, 'repo_id'),
+        'category' => fetch_key(giscus, 'category'),
+        'category_id' => fetch_key(giscus, 'category_id')
+      }
+
+      required.each_with_object([]) do |(name, value), missing|
+        missing << name if value_blank?(value)
       end
+    end
 
-      ''
+    def giscus_warning_html(style, spacer, missing_fields)
+      details = if missing_fields.empty?
+                  ''
+                else
+                  "<p>Missing required keys: <code>#{missing_fields.join(', ')}</code>.</p>"
+                end
+
+      warning = <<~HTML
+        <blockquote class="block-danger">
+          <h5>giscus comments misconfigured</h5>
+          <p>Please follow instructions at <a href="http://giscus.app">http://giscus.app</a> and update your giscus configuration.</p>
+          #{details}
+        </blockquote>
+      HTML
+
+      %(<div id="giscus_thread"#{style}>#{spacer}\n#{warning}</div>)
     end
 
     def disqus_html(site, page, disqus_shortname)
@@ -127,15 +149,10 @@ module AlComments
       max_width = fetch_key(site.config, 'max_width')
       style = post_layout?(page) ? " style=\"max-width: #{max_width}; margin: 0 auto;\"" : ''
       spacer = post_layout?(page) ? "\n  <br>" : ''
+      missing_fields = missing_giscus_fields(giscus, repo)
 
-      if repo.to_s.strip.empty?
-        warning = <<~HTML
-          <blockquote class="block-danger">
-            <h5>giscus comments misconfigured</h5>
-            <p>Please follow instructions at <a href="http://giscus.app">http://giscus.app</a> and update your giscus configuration.</p>
-          </blockquote>
-        HTML
-        return %(<div id="giscus_thread"#{style}>#{spacer}\n#{warning}</div>)
+      unless missing_fields.empty?
+        return giscus_warning_html(style, spacer, missing_fields)
       end
 
       <<~HTML

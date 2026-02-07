@@ -43,6 +43,9 @@ class AlCommentsTagTest < Minitest::Test
       config: {
         'giscus' => {
           repo: 'al-org/al-folio',
+          'repo_id' => 'R_kgDO...',
+          'category' => 'Comments',
+          'category_id' => 'DIC_kwDO...',
           'light_theme' => 'light',
           'dark_theme' => 'dark'
         }
@@ -54,17 +57,35 @@ class AlCommentsTagTest < Minitest::Test
     refute_includes output, 'giscus comments misconfigured'
   end
 
-  def test_renders_giscus_when_falling_back_to_repository
+  def test_warns_when_required_giscus_ids_are_missing
     output = render_comments(
       config: {
-        'repository' => 'al-org/al-folio',
         'giscus' => { 'category' => 'Comments' }
       },
       page: { 'giscus_comments' => true }
     )
 
-    assert_includes output, 'https://giscus.app/client.js'
-    refute_includes output, 'giscus comments misconfigured'
+    assert_includes output, 'giscus comments misconfigured'
+    assert_includes output, 'repo'
+    assert_includes output, 'repo_id'
+    assert_includes output, 'category_id'
+  end
+
+  def test_does_not_fall_back_to_site_repository_for_giscus_repo
+    output = render_comments(
+      config: {
+        'repository' => 'al-org/al-folio',
+        'giscus' => {
+          'repo_id' => 'R_kgDO...',
+          'category' => 'Comments',
+          'category_id' => 'DIC_kwDO...'
+        }
+      },
+      page: { 'giscus_comments' => true }
+    )
+
+    assert_includes output, 'giscus comments misconfigured'
+    refute_includes output, 'https://giscus.app/client.js'
   end
 
   def test_warns_when_giscus_is_enabled_but_repo_missing

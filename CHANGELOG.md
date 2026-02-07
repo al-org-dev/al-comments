@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 - 2026-02-07
+- Aligned giscus activation behavior with al-folio main branch expectations:
+  - Removed fallback from `site.repository` / `site.github.repository_nwo` to avoid partially configured giscus injection.
+  - Requires `repo`, `repo_id`, `category`, and `category_id` before loading giscus client script.
+  - Shows theme-side warning with missing required keys when configuration is incomplete.
+- Expanded tests for incomplete giscus config handling.
+
 ## 0.1.1 - 2026-02-07
 - Improved config compatibility for comment rendering:
   - Supports both string and symbol keys for nested config values.
