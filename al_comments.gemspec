@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name          = "al_comments"
-  spec.version       = "0.1.2"
+  spec.version       = "1.0.0"
   spec.authors       = ["al-org"]
   spec.email         = ["dev@al-org.dev"]
   spec.summary       = "Giscus and Disqus comments tag for Jekyll sites"
