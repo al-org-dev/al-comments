@@ -1,6 +1,6 @@
-# Al-Comments
+# al-comments
 
-A Jekyll plugin that provides reusable comment integrations for al-folio-compatible themes.
+`al_comments` provides reusable comment integrations for `al-folio` v1.x and compatible Jekyll sites.
 
 ## Features
 
@@ -10,27 +10,28 @@ A Jekyll plugin that provides reusable comment integrations for al-folio-compati
 
 ## Installation
 
-Add this to your `Gemfile`:
-
 ```ruby
 gem 'al_comments'
 ```
-
-Then run:
-
-```bash
-bundle install
-```
-
-Enable in `_config.yml`:
 
 ```yaml
 plugins:
   - al_comments
 ```
 
+## Usage
+
 Render comments where needed:
 
 ```liquid
 {% al_comments %}
 ```
+
+## Ecosystem context
+
+- Starter wiring/examples live in `al-folio`.
+- Comment integration behavior is plugin-owned here.
+
+## Contributing
+
+Comment-system support and runtime behavior changes should be proposed in this repository.
